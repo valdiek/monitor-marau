@@ -1,6 +1,6 @@
 # Monitor de focos de calor · TI Andirá-Marau
 
-Site estático que mostra os focos de calor das últimas 48 horas ao redor da comunidade Ilha Michiles (rio Marau), na Terra Indígena Andirá-Marau (Sateré-Mawé). Cada foco mostra a distância e a direção a partir da comunidade, e focos ativos a até 10 km geram aviso no Telegram. Atualiza sozinho a cada hora pelo GitHub Actions e fica hospedado de graça no GitHub Pages.
+Site estático que mostra os focos de calor das últimas 48 horas ao redor da comunidade Ilha Michiles (rio Marau), na Terra Indígena Andirá-Marau (Sateré-Mawé). Cada foco mostra a distância e a direção a partir da comunidade, e focos ativos a até 10 km geram aviso no WhatsApp. Atualiza sozinho a cada hora pelo GitHub Actions e fica hospedado de graça no GitHub Pages.
 
 ## O que o site mostra
 
@@ -16,13 +16,28 @@ Site estático que mostra os focos de calor das últimas 48 horas ao redor da co
 3. Em **Settings → Pages**: *Deploy from a branch*, branch `main`, pasta `/docs`.
 4. Em **Actions → Focos de calor → Run workflow**, rode uma vez para gerar os primeiros dados reais. Depois roda sozinho a cada hora.
 
+## Avisos no WhatsApp
+
+Usa a API oficial da Meta (WhatsApp Cloud API). Precisa de um número de celular só do projeto (que não esteja em uso no app do WhatsApp).
+
+1. Em business.facebook.com, crie a conta empresarial do projeto.
+2. Em developers.facebook.com → *Meus apps* → *Criar app* (tipo *Empresa*) → adicione o produto **WhatsApp** e cadastre o número do projeto. Anote o **Phone number ID**.
+3. No *WhatsApp Manager* → *Modelos de mensagem*, crie o modelo abaixo e espere a aprovação.
+4. Em *Configurações do negócio* → *Usuários do sistema*, crie um usuário (Admin), dê acesso ao app e gere um **token permanente** com as permissões `whatsapp_business_messaging` e `whatsapp_business_management`.
+5. No GitHub, em **Settings → Secrets and variables → Actions**, cadastre os segredos `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID` e `WHATSAPP_PARA` (números com DDI e DDD, separados por vírgula: `5592991234567,5592998765432`).
+6. Teste: **Actions → Focos de calor → Run workflow**, marque *Só enviar uma mensagem de TESTE* e rode.
+
+**Modelo de mensagem** — nome `alerta_foco_calor`, categoria **Utilidade**, idioma **Português (BR)**:
+
+> 🔥 Alerta de foco de calor: {{1}} foco(s) ativo(s) a até 10 km da comunidade {{2}}. Detalhes: {{3}}. Veja o mapa: {{4}} — Confirme em campo antes de agir.
+
+Exemplos para a Meta: `1` · `Ilha Michiles` · `3,2 km a nordeste, desde 19/10 14h30 (-3.7345, -57.2176)` · `https://valdiek.github.io/monitor-marau/`
+
+A Meta cobra por mensagem de modelo enviada (centavos por mensagem). Cada foco é avisado uma vez só.
+
 ## Avisos no Telegram (opcional)
 
-1. No Telegram, fale com o **@BotFather**, mande `/newbot` e guarde o token que ele devolve.
-2. Crie um grupo com os técnicos e as lideranças e adicione o bot. Mande uma mensagem no grupo e abra `https://api.telegram.org/bot<TOKEN>/getUpdates` para ver o `chat.id` (número negativo).
-3. Cadastre os segredos `TELEGRAM_TOKEN` e `TELEGRAM_CHAT_ID` no repositório. Em **Variables**, crie `SITE_URL` com o endereço do site.
-
-Cada foco ativo a até `ALERTA_KM` (10 km) da comunidade é avisado uma vez só.
+Crie um bot com o **@BotFather**, adicione-o a um grupo e cadastre os segredos `TELEGRAM_TOKEN` e `TELEGRAM_CHAT_ID`. Pode funcionar junto com o WhatsApp.
 
 ## Comunidade e distâncias
 
