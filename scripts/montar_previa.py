@@ -64,6 +64,10 @@ if COM_MAPA:
     saida_cab = '<!doctype html>\n<html lang="pt-BR">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
 else:
     saida_cab = ""
+import base64
+for nome in ("ufam", "vsm"):
+    b64 = base64.b64encode((R / "img" / f"{nome}.png").read_bytes()).decode()
+    corpo = corpo.replace(f'src="img/{nome}.png"', f'src="data:image/png;base64,{b64}"')
 saida = saida_cab + f"""<title>Focos de calor Andirá-Marau</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
