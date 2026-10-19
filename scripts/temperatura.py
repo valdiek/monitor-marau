@@ -58,35 +58,38 @@ def caixa():
     return (c["lon"] - dlon, c["lat"] - dlat, c["lon"] + dlon, c["lat"] + dlat)
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--dias", type=int, default=C.TEMPERATURA["janela_dias"])
-    a = ap.parse_args()
+def caixa_ti():
+    from shapely.geometry import shape
+    from shapely.ops import unary_union
+    g = unary_union([shape(f["geometry"]) for f in json.loads(C.TI_ARQUIVO.read_text())["features"]])
+    lat0 = g.centroid.y
+    d = C.ENTORNO_KM
+    o, s_, l, n = g.bounds
+    dlat, dlon = d / 110.57, d / (111.32 * math.cos(math.radians(lat0)))
+    # área = TI + entorno (aprox. por buffer em graus, só para o recorte visual)
+    area = g.buffer(max(dlat, dlon), quad_segs=8)
+    return (o - dlon, s_ - dlat, l + dlon, n + dlat), area
 
-    import planetary_computer
-    import pystac_client
+
+def gerar(cat, bbox, res, prefixo, dias, recorte=None):
     from odc.stac import load
-
-    bbox = caixa()
     fim = datetime.now(timezone.utc)
-    inicio = fim - timedelta(days=a.dias)
-    cat = pystac_client.Client.open(STAC, modifier=planetary_computer.sign_inplace)
+    inicio = fim - timedelta(days=dias)
     itens = list(cat.search(
         collections=["landsat-c2-l2"], bbox=bbox,
         datetime=f"{inicio:%Y-%m-%d}/{fim:%Y-%m-%d}",
         query={"platform": {"in": ["landsat-8", "landsat-9"]}, "eo:cloud_cover": {"lt": 90}},
     ).items())
-    print(f"{len(itens)} cenas Landsat de {inicio:%d/%m} a {fim:%d/%m}")
+    print(f"[{prefixo}] {len(itens)} cenas Landsat de {inicio:%d/%m} a {fim:%d/%m}")
     saida = C.DADOS
     meta = {"gerado_em": fim.strftime("%Y-%m-%dT%H:%M:%SZ"), "bounds": [[bbox[1], bbox[0]], [bbox[3], bbox[2]]],
             "escala_c": [T_MIN, T_MAX], "rampa": [[t, "#%02x%02x%02x" % c] for t, c in RAMPA],
-            "janela_dias": a.dias, "cenas": [], "cobertura_pct": 0}
+            "janela_dias": dias, "resolucao_m": round(res * 111320), "cenas": [], "cobertura_pct": 0}
     if not itens:
         meta["erro"] = "nenhuma cena Landsat no período"
-        (saida / "lst.json").write_text(json.dumps(meta, ensure_ascii=False))
+        (saida / f"{prefixo}.json").write_text(json.dumps(meta, ensure_ascii=False))
         return
 
-    res = C.TEMPERATURA["resolucao_graus"]
     ds = load(itens, bands=["lwir11", "qa_pixel"], bbox=bbox, crs="EPSG:4326",
               resolution=res, groupby="solar_day", chunks={}, resampling={"lwir11": "bilinear", "*": "nearest"})
     ds = ds.compute()
@@ -100,7 +103,7 @@ def main():
     for k in ordem:
         st = ds["lwir11"].isel(time=k).values.astype(np.float32)
         qa = ds["qa_pixel"].isel(time=k).values.astype(np.uint16)
-        ruim = (qa & (1 << 0)) | (qa & (1 << 1)) | (qa & (1 << 2)) | (qa & (1 << 3)) | (qa & (1 << 4))
+        ruim = qa & 0b11111  # preenchimento, nuvem dilatada, cirrus, nuvem, sombra
         ok = (st > 0) & (ruim == 0)
         t = st * 0.00341802 + 149.0 - 273.15
         ok &= (t > 5) & (t < 75)
@@ -111,9 +114,18 @@ def main():
     lon = ds.longitude.values
     if lat[0] < lat[-1]:  # garante norte em cima
         temp, origem, lat = temp[::-1], origem[::-1], lat[::-1]
+    if recorte is not None:
+        from shapely import contains_xy
+        xx, yy = np.meshgrid(lon, lat)
+        fora = ~contains_xy(recorte, xx, yy)
+        temp[fora] = np.nan
+        origem[fora] = -1
+        dentro = ~fora
+    else:
+        dentro = np.ones_like(temp, bool)
     validos = ~np.isnan(temp)
-    meta["cobertura_pct"] = round(100 * validos.mean(), 1)
-    print(f"cobertura sem nuvem: {meta['cobertura_pct']}%")
+    meta["cobertura_pct"] = round(100 * validos.sum() / max(1, dentro.sum()), 1)
+    print(f"[{prefixo}] cobertura sem nuvem: {meta['cobertura_pct']}%  ({nx}x{ny} px)")
 
     plataformas, horas = {}, {}
     for it in itens:
@@ -141,12 +153,28 @@ def main():
     # valores (canal R) e cena (canal G) para leitura ao tocar no mapa
     cod = np.where(validos, np.clip(np.round((np.nan_to_num(temp, nan=T_MIN) - T_MIN) * 4) + 1, 1, 255), 0).astype(np.uint8)
     cena = np.where(validos, np.clip(origem + 1, 0, 255), 0).astype(np.uint8)
-    Image.fromarray(np.stack([cod, cena, np.zeros_like(cod)], -1), "RGB").save(saida / "lst_valor.png", optimize=True)
-    salvar_colorido(cod, saida / "lst.png")
+    Image.fromarray(np.stack([cod, cena, np.zeros_like(cod)], -1), "RGB").save(saida / f"{prefixo}_valor.png", optimize=True)
+    salvar_colorido(cod, saida / f"{prefixo}.png")
     meta["tamanho_px"] = [nx, ny]
     meta["codigo"] = {"canal_r": f"(°C - {T_MIN}) * 4 + 1; 0 = sem dado", "canal_g": "índice da cena + 1"}
-    (saida / "lst.json").write_text(json.dumps(meta, ensure_ascii=False))
+    (saida / f"{prefixo}.json").write_text(json.dumps(meta, ensure_ascii=False))
     print(json.dumps({k: meta[k] for k in ("cobertura_pct", "estat", "cenas") if k in meta}, ensure_ascii=False))
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--dias", type=int, default=C.TEMPERATURA["janela_dias"])
+    a = ap.parse_args()
+
+    import planetary_computer
+    import pystac_client
+    cat = pystac_client.Client.open(STAC, modifier=planetary_computer.sign_inplace)
+
+    # 1) comunidade, 30 m
+    gerar(cat, caixa(), C.TEMPERATURA["resolucao_graus"], "lst", a.dias)
+    # 2) TI inteira + entorno, ~90 m (arquivo leve para o tablet)
+    bbox, area = caixa_ti()
+    gerar(cat, bbox, C.TEMPERATURA["resolucao_ti_graus"], "lst_ti", a.dias, recorte=area)
 
 
 if __name__ == "__main__":

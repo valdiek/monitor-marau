@@ -40,6 +40,7 @@ TEMPERATURA = {
     "raio_km": 22,               # quadrado ao redor da comunidade
     "janela_dias": 48,           # junta as cenas desse período (a região é muito nublada)
     "resolucao_graus": 0.0003,   # ~33 m
+    "resolucao_ti_graus": 0.0008,  # ~90 m para a TI inteira
     "escala_c": [20, 46],        # faixa de cores
 }
 
