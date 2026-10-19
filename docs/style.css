@@ -214,3 +214,46 @@ main { padding: 12px 16px 24px; }
 .logos a { display: block; border-radius: 6px; }
 .logos a:focus-visible { outline: 2px solid var(--marau); outline-offset: 4px; }
 .rodape { text-align: center; }
+
+/* ---------- camadas do mapa */
+.camadas { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.camadas-rot { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--suave); }
+.seg button:disabled { opacity: .45; cursor: not-allowed; }
+.painel-camada { background: var(--fundo); border: 1px solid var(--linha); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display: grid; gap: 8px; }
+.painel-linha { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+.painel-linha .nota { margin: 0; flex: 1 1 260px; min-width: 0; }
+.opac { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--suave); }
+.opac input { width: 120px; accent-color: var(--marau); }
+.seg-mini button { font-size: 12px; padding: 4px 10px; min-height: 28px; }
+.escala-barra { height: 12px; border-radius: 6px; border: 1px solid var(--linha); }
+.escala-marcas { position: relative; height: 16px; font-size: 11px; color: var(--suave); font-variant-numeric: tabular-nums; margin: 2px 0 0; }
+.escala-marcas span { position: absolute; transform: translateX(-50%); }
+.escala-marcas span:first-child { transform: none; }
+.escala-marcas em { position: absolute; right: 0; top: 14px; font-style: normal; }
+.img-lst, .img-ar { image-rendering: auto; }
+.img-lst { image-rendering: pixelated; }
+
+/* ---------- qualidade do ar */
+.ar-topo { display: grid; grid-template-columns: 1.3fr repeat(3, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 560px) { .ar-topo { grid-template-columns: repeat(3, minmax(0, 1fr)); } .ar-nivel { grid-column: 1 / -1; } }
+.ar-nivel { background: var(--c); color: #fff; border-radius: 12px; padding: 10px 14px; display: grid; align-content: center; }
+.ar-nivel span { font-size: 12px; opacity: .9; text-transform: uppercase; letter-spacing: .08em; }
+.ar-nivel b { font-family: var(--fonte-titulo, inherit); font-size: 26px; line-height: 1.1; }
+.ar-nivel small { font-size: 12px; opacity: .9; }
+.ar-num { border: 1px solid var(--linha); border-radius: 10px; padding: 8px 10px; min-width: 0; }
+.ar-num b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; font-family: var(--fonte-titulo, inherit); }
+.ar-num span { font-size: 12px; color: var(--suave); line-height: 1.25; display: block; }
+.ar-grafico { margin-top: 10px; overflow: hidden; }
+.ar-grafico svg { display: block; }
+.g-ref { stroke: var(--suave); stroke-dasharray: 3 3; stroke-width: 1; opacity: .5; }
+.g-dia { stroke: var(--linha); stroke-width: 1; }
+.g-base { stroke: var(--suave); stroke-width: 1; }
+.g-agora { stroke: var(--tinta); stroke-width: 1.5; stroke-dasharray: 2 2; }
+.g-rot { font-size: 10px; fill: var(--suave); font-family: inherit; }
+.g-rot.forte { fill: var(--tinta); font-weight: 700; }
+.g-leg { margin-top: 4px; }
+.ar-nivel.claro { color: #2b2100; }
+.escala-marcas { margin-right: 0; }
+.escala-marcas span:last-of-type { transform: translateX(-100%); }
+.escala-marcas em:empty { display: none; }
+.zoom-baixo .rotulo-anel { display: none; }

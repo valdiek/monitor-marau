@@ -15,6 +15,8 @@
   const dh = (s) => (s ? fmtDiaHora.format(d(s)).replace(",", "") : "–");
 
   let E, mapa, camadaFocos, fundos = {}, filtro = "todos";
+  let AR = null, LST = null, camadaExtra = null, camadaAtual = "nenhuma", lstPixels = null, arQuando = "agora";
+  const arquivo = (n) => (window.ARQUIVOS && window.ARQUIVOS[n]) || `data/${n}`;
   const marcadores = {};
 
   function corIdade(horas) {
@@ -47,8 +49,12 @@
     fetch("data/ti.geojson").then((r) => r.json()),
     fetch("data/municipios.geojson").then((r) => r.json()).catch(() => null),
     fetch("data/zonas.geojson", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
-  ]).then(([estado, ti, mun, zonas]) => {
+    fetch("data/ar.json", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
+    fetch("data/lst.json", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
+  ]).then(([estado, ti, mun, zonas, ar, lst]) => {
     E = estado;
+    AR = ar && !ar.erro && ar.serie ? ar : null;
+    LST = lst && !lst.erro && lst.estat ? lst : null;
     resumo();
     semaforo();
     avisos();
@@ -56,6 +62,8 @@
     focosNoMapa();
     linhaDoTempo();
     passagens();
+    quadroAr();
+    iniciarCamadas();
   }).catch((e) => {
     $("#atual").textContent = "Não foi possível carregar os dados.";
     console.error(e);
@@ -194,6 +202,8 @@
     enquadrar("com");
     camadaFocos = L.layerGroup().addTo(mapa);
     mapa.on("zoomend", focosNoMapa);
+    const rotulos = () => mapa.getContainer().classList.toggle("zoom-baixo", mapa.getZoom() < 10);
+    mapa.on("zoomend", rotulos); rotulos();
   }
 
   function popup(f) {
@@ -245,7 +255,7 @@
       const raio = Math.min(16, 7 + Math.sqrt(f.n) * 1.4);
       const m = L.circleMarker([f.lat, f.lon], {
         radius: raio, color: ext ? c : "#2a0d05", weight: ext ? 2 : 1.5, dashArray: ext ? "3 3" : null,
-        fillColor: c, fillOpacity: ext ? .15 : .9,
+        fillColor: c, fillOpacity: ext ? .15 : .9, bubblingMouseEvents: false,
       }).bindPopup(popup(f), { maxWidth: 280 })
         .bindTooltip(f.id, { permanent: zoom >= 10, direction: "right", offset: [raio, 0], className: "rotulo-foco" })
         .addTo(camadaFocos);
@@ -338,5 +348,173 @@
         <td class="n ${p.n_area ? "pos" : ""}">${p.n_area}</td></tr>`;
     }
     tb.innerHTML = html;
+  }
+
+  // ================================================================ qualidade do ar
+  const AR_PARADAS = [[0, "#43a047"], [15, "#c0ca33"], [32, "#fdd835"], [50, "#fb8c00"], [75, "#e53935"], [125, "#7b1fa2"], [200, "#4a0072"]];
+  const AR_FAIXA_COR = { boa: "#43a047", moderada: "#f9a825", ruim: "#ef6c00", muito_ruim: "#d32f2f", pessima: "#6a1b9a" };
+  function hex(h) { return [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); }
+  function rampa(v, paradas) {
+    if (v <= paradas[0][0]) return hex(paradas[0][1]);
+    for (let i = 1; i < paradas.length; i++) {
+      const [a, ca] = paradas[i - 1], [b, cb] = paradas[i];
+      if (v <= b) { const t = (v - a) / (b - a), x = hex(ca), y = hex(cb); return x.map((k, j) => Math.round(k + (y[j] - k) * t)); }
+    }
+    return hex(paradas[paradas.length - 1][1]);
+  }
+  function faixaAr(v) {
+    if (v == null) return null;
+    return v <= 15 ? "boa" : v <= 50 ? "moderada" : v <= 75 ? "ruim" : v <= 125 ? "muito_ruim" : "pessima";
+  }
+  const NOME_FAIXA = { boa: "Boa", moderada: "Moderada", ruim: "Ruim", muito_ruim: "Muito ruim", pessima: "Péssima" };
+  const horaDe = (t) => new Date(t + ":00-04:00");
+
+  function quadroAr() {
+    if (!AR) return;
+    $("#ar").hidden = false;
+    $("#ar-fonte").textContent = AR.fonte === "valores de teste" ? "valores de teste" : `modelo ${AR.modelo}`;
+    const a = AR.atual || {}, cod = AR.nivel || faixaAr(a.pm25);
+    const pico = AR.pico24;
+    $("#ar-topo").innerHTML = `
+      <div class="ar-nivel${cod === "moderada" || cod === "boa" ? " claro" : ""}" style="--c:${AR_FAIXA_COR[cod] || "var(--suave)"}">
+        <span>Ar hoje</span><b>${NOME_FAIXA[cod] || "–"}</b><small>média das últimas 24 h</small>
+      </div>
+      <div class="ar-num"><b>${a.pm25 != null ? Math.round(a.pm25) : "–"}</b><span>PM2.5 agora<br>µg/m³</span></div>
+      <div class="ar-num"><b>${AR.media24 != null ? Math.round(AR.media24) : "–"}</b><span>média 24 h<br>µg/m³</span></div>
+      <div class="ar-num"><b>${pico ? Math.round(pico.pm25) : "–"}</b><span>pior nas próximas 24 h${pico ? `<br>${fmtHora.format(horaDe(pico.t)).replace(":00", "h")} · ${NOME_FAIXA[faixaAr(pico.pm25)]}` : ""}</span></div>`;
+    graficoAr();
+  }
+
+  function graficoAr() {
+    const el = $("#ar-grafico");
+    const S = AR.serie.filter((p) => p.pm25 != null);
+    if (!S.length) return;
+    const W = Math.max(300, el.clientWidth || 600), H = 150, m = { l: 28, r: 6, t: 8, b: 22 };
+    const max = Math.max(80, ...S.map((p) => p.pm25)) * 1.08;
+    const bw = (W - m.l - m.r) / S.length;
+    const y = (v) => m.t + (H - m.t - m.b) * (1 - v / max);
+    const agora = horaDe(AR.hora_local).getTime();
+    let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" aria-hidden="true">`;
+    for (const [v, rot] of [[15, "15 boa"], [50, "50 moderada"], [75, "75 ruim"]]) {
+      if (v > max) continue;
+      svg += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" class="g-ref"/><text x="${m.l - 4}" y="${y(v) + 3}" class="g-rot" text-anchor="end">${v}</text>`;
+    }
+    S.forEach((p, i) => {
+      const t = horaDe(p.t).getTime();
+      const futuro = t > agora;
+      svg += `<rect x="${(m.l + i * bw).toFixed(1)}" y="${y(p.pm25).toFixed(1)}" width="${Math.max(1, bw - .6).toFixed(1)}" height="${(H - m.b - y(p.pm25)).toFixed(1)}" fill="${AR_FAIXA_COR[faixaAr(p.pm25)]}" opacity="${futuro ? .45 : .95}"><title>${dh(new Date(t).toISOString())}: ${Math.round(p.pm25)} µg/m³</title></rect>`;
+      if (p.t.endsWith("T00:00")) {
+        svg += `<line x1="${m.l + i * bw}" x2="${m.l + i * bw}" y1="${m.t}" y2="${H - m.b}" class="g-dia"/><text x="${m.l + i * bw + 3}" y="${H - 7}" class="g-rot">${p.t.slice(8, 10)}/${p.t.slice(5, 7)}</text>`;
+      }
+      if (t === agora) {
+        svg += `<line x1="${m.l + i * bw}" x2="${m.l + i * bw}" y1="${m.t - 4}" y2="${H - m.b}" class="g-agora"/><text x="${m.l + i * bw + 3}" y="${m.t + 6}" class="g-rot forte">agora</text>`;
+      }
+    });
+    svg += `<line x1="${m.l}" x2="${W - m.r}" y1="${H - m.b}" y2="${H - m.b}" class="g-base"/></svg>`;
+    el.innerHTML = svg + '<p class="nota g-leg">Barras cheias: estimativa das últimas horas. Barras claras: previsão.</p>';
+  }
+  window.addEventListener("resize", () => AR && graficoAr());
+
+  // ================================================================ camadas do mapa
+  function iniciarCamadas() {
+    const bt = document.querySelectorAll("[data-camada]");
+    bt.forEach((b) => {
+      const tem = b.dataset.camada === "nenhuma" || (b.dataset.camada === "lst" ? LST : AR);
+      if (!tem) { b.disabled = true; b.title = "ainda sem dados"; }
+      b.addEventListener("click", () => {
+        if (b.disabled) return;
+        bt.forEach((x) => x.classList.toggle("on", x === b));
+        mostrarCamada(b.dataset.camada);
+      });
+    });
+    $("#opacidade").addEventListener("input", (e) => camadaExtra && camadaExtra.setOpacity(e.target.value / 100));
+    document.querySelectorAll("[data-quando]").forEach((b) => b.addEventListener("click", () => {
+      arQuando = b.dataset.quando;
+      document.querySelectorAll("[data-quando]").forEach((x) => x.classList.toggle("on", x === b));
+      mostrarCamada("ar");
+    }));
+    mapa.on("click", lerPonto);
+  }
+
+  function mostrarCamada(qual) {
+    camadaAtual = qual;
+    if (camadaExtra) { mapa.removeLayer(camadaExtra); camadaExtra = null; }
+    const painel = $("#painel-camada");
+    painel.hidden = qual === "nenhuma";
+    $("#ar-quando").hidden = qual !== "ar";
+    const op = $("#opacidade").value / 100;
+    if (qual === "lst") {
+      camadaExtra = L.imageOverlay(arquivo("lst.png") + (window.ARQUIVOS ? "" : `?v=${LST.gerado_em}`), LST.bounds, { opacity: op, className: "img-lst", interactive: false }).addTo(mapa);
+      camadaExtra.bringToBack();
+      escala(LST.rampa, LST.escala_c[0], LST.escala_c[1], "", [20, 25, 30, 35, 40, 46], "°C");
+      const cenas = LST.cenas.slice(0, 3).map((c) => `${c.satelite} ${c.data.slice(8, 10)}/${c.data.slice(5, 7)} (${Math.round(c.pct)}%)`).join(", ");
+      const com = LST.estat.comunidade != null ? ` Na comunidade: <b>${km1(LST.estat.comunidade)} °C</b>.` : "";
+      $("#camada-info").innerHTML = `Temperatura da superfície às ~10h, Landsat 30 m. ${Math.round(LST.cobertura_pct)}% da área sem nuvem nos últimos ${LST.janela_dias} dias; partes sem cor estavam cobertas. Cenas: ${cenas}.${com} Toque no mapa para ver o valor.`;
+      if (!lstPixels) carregarPixels();
+    } else if (qual === "ar") {
+      const g = AR.grade, M = g[arQuando];
+      const cv = document.createElement("canvas");
+      cv.width = g.lons.length; cv.height = g.lats.length;
+      const cx = cv.getContext("2d"), img = cx.createImageData(cv.width, cv.height);
+      for (let i = 0; i < g.lats.length; i++) for (let j = 0; j < g.lons.length; j++) {
+        const v = M[i][j], k = ((g.lats.length - 1 - i) * cv.width + j) * 4;
+        if (v == null) continue;
+        const [r, gg, b] = rampa(v, AR_PARADAS);
+        img.data.set([r, gg, b, 255], k);
+      }
+      cx.putImageData(img, 0, 0);
+      const p = g.passo / 2;
+      camadaExtra = L.imageOverlay(cv.toDataURL(), [[g.lats[0] - p, g.lons[0] - p], [g.lats[g.lats.length - 1] + p, g.lons[g.lons.length - 1] + p]],
+        { opacity: op, className: "img-ar", interactive: false }).addTo(mapa);
+      camadaExtra.bringToBack();
+      escala(AR_PARADAS.slice(0, 6), 0, 125, "", [0, 15, 50, 75, 125]);
+      $("#camada-info").innerHTML = `Fumaça fina (PM2.5, em µg/m³), modelo CAMS (~40 km), ${arQuando === "agora" ? "hora atual" : "pior valor das próximas 24 h"}. Mostra para onde a fumaça da região está indo. Toque no mapa para ver o valor.`;
+    }
+    if (qual === "ar") mapa.fitBounds(camadaExtra.getBounds(), { padding: [4, 4] });
+    else if (qual === "lst") mapa.fitBounds(LST.bounds, { padding: [4, 4] });
+  }
+
+  function escala(paradas, min, max, unidade, marcas, sufixo = "") {
+    const pos = (v) => ((v - min) / (max - min)) * 100;
+    const grad = paradas.map(([v, c]) => `${c} ${Math.max(0, Math.min(100, pos(v))).toFixed(1)}%`).join(", ");
+    $("#escala").innerHTML = `<div class="escala-barra" style="background:linear-gradient(90deg, ${grad})"></div>
+      <div class="escala-marcas">${marcas.map((v, i) => `<span style="left:${pos(v)}%">${v}${i === marcas.length - 1 ? (sufixo ? " " + sufixo : "+") : ""}</span>`).join("")}<em>${unidade}</em></div>`;
+  }
+
+  function carregarPixels() {
+    const im = new Image();
+    im.onload = () => {
+      const cv = document.createElement("canvas");
+      cv.width = im.width; cv.height = im.height;
+      const cx = cv.getContext("2d", { willReadFrequently: true });
+      cx.drawImage(im, 0, 0);
+      lstPixels = { w: im.width, h: im.height, d: cx.getImageData(0, 0, im.width, im.height).data };
+    };
+    im.src = arquivo("lst_valor.png") + (window.ARQUIVOS ? "" : `?v=${LST.gerado_em}`);
+  }
+
+  function lerPonto(ev) {
+    const { lat, lng } = ev.latlng;
+    let html = null;
+    if (camadaAtual === "lst" && LST && lstPixels) {
+      const [[s, w], [n, e]] = LST.bounds;
+      if (lat < s || lat > n || lng < w || lng > e) return;
+      const x = Math.floor(((lng - w) / (e - w)) * lstPixels.w), y = Math.floor(((n - lat) / (n - s)) * lstPixels.h);
+      const k = (y * lstPixels.w + x) * 4, r = lstPixels.d[k], g = lstPixels.d[k + 1];
+      if (!r) html = "<b>Sem dado</b><br>Nuvem ou sombra em todas as imagens do período.";
+      else {
+        const t = (r - 1) / 4 + LST.escala_c[0];
+        const c = LST.cenas.find((x) => x.indice === g - 1);
+        html = `<b>${km1(t.toFixed(1))} °C</b> na superfície<br>${c ? `${c.satelite} · ${c.data.slice(8, 10)}/${c.data.slice(5, 7)}${c.hora_utc ? ` · ~${String((+c.hora_utc.slice(0, 2) + 20) % 24).padStart(2, "0")}h${c.hora_utc.slice(3)}` : ""}` : ""}`;
+      }
+    } else if (camadaAtual === "ar" && AR) {
+      const g = AR.grade, p = g.passo;
+      const i = Math.round((lat - g.lats[0]) / p), j = Math.round((lng - g.lons[0]) / p);
+      if (i < 0 || j < 0 || i >= g.lats.length || j >= g.lons.length) return;
+      const v = g[arQuando][i][j];
+      if (v == null) return;
+      html = `<b>${Math.round(v)} µg/m³</b> de PM2.5<br>Ar ${NOME_FAIXA[faixaAr(v)].toLowerCase()} · ${arQuando === "agora" ? "agora" : "pior em 24 h"}`;
+    }
+    if (html) L.popup({ maxWidth: 240 }).setLatLng(ev.latlng).setContent(`<div class="pop">${html}</div>`).openOn(mapa);
   }
 })();

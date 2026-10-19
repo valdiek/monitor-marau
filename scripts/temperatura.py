@@ -40,6 +40,16 @@ def colorir(t):
     return rgb.astype(np.uint8)
 
 
+def salvar_colorido(cod, destino):
+    """PNG com paleta (bem menor que RGBA): índice 0 transparente, 1..255 = (°C - MIN) * 4 + 1."""
+    temps = (np.arange(256) - 1) / 4 + T_MIN
+    pal = colorir(np.clip(temps, T_MIN, T_MAX))
+    pal[0] = (0, 0, 0)
+    im = Image.fromarray(cod, "P")
+    im.putpalette(pal.flatten().tolist())
+    im.save(destino, optimize=True, transparency=0)
+
+
 def caixa():
     c = C.COMUNIDADE
     r = C.TEMPERATURA["raio_km"]
@@ -128,15 +138,11 @@ def main():
     # limites reais da grade (bordas dos pixels)
     meta["bounds"] = [[float(lat[-1] - res / 2), float(lon[0] - res / 2)], [float(lat[0] + res / 2), float(lon[-1] + res / 2)]]
 
-    rgba = np.zeros((ny, nx, 4), np.uint8)
-    rgba[..., :3] = colorir(np.clip(np.nan_to_num(temp, nan=T_MIN), T_MIN, T_MAX))
-    rgba[..., 3] = np.where(validos, 255, 0)
-    Image.fromarray(rgba, "RGBA").save(saida / "lst.png", optimize=True)
-
     # valores (canal R) e cena (canal G) para leitura ao tocar no mapa
     cod = np.where(validos, np.clip(np.round((np.nan_to_num(temp, nan=T_MIN) - T_MIN) * 4) + 1, 1, 255), 0).astype(np.uint8)
     cena = np.where(validos, np.clip(origem + 1, 0, 255), 0).astype(np.uint8)
     Image.fromarray(np.stack([cod, cena, np.zeros_like(cod)], -1), "RGB").save(saida / "lst_valor.png", optimize=True)
+    salvar_colorido(cod, saida / "lst.png")
     meta["tamanho_px"] = [nx, ny]
     meta["codigo"] = {"canal_r": f"(°C - {T_MIN}) * 4 + 1; 0 = sem dado", "canal_g": "índice da cena + 1"}
     (saida / "lst.json").write_text(json.dumps(meta, ensure_ascii=False))

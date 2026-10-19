@@ -44,9 +44,10 @@ css += ("\n.leaflet-container { background: var(--mapa-bg); }\n.cartao b { font-
         "@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }\n")
 
 dados = {k: json.loads((R / "data" / f).read_text()) for k, f in
-         [("estado", "estado.json"), ("ti", "ti.geojson"), ("mun", "municipios.geojson"), ("zonas", "zonas.geojson")]}
-i, f = js.index("  Promise.all(["), js.index(".then(([estado, ti, mun, zonas]) => {")
-js = js[:i] + "  Promise.resolve([DADOS.estado, DADOS.ti, DADOS.mun, DADOS.zonas])" + js[f:]
+         [("estado", "estado.json"), ("ti", "ti.geojson"), ("mun", "municipios.geojson"), ("zonas", "zonas.geojson"),
+          ("ar", "ar.json"), ("lst", "lst.json")] if (R / "data" / f).exists()}
+i, f = js.index("  Promise.all(["), js.index(".then(([estado, ti, mun, zonas, ar, lst]) => {")
+js = js[:i] + "  Promise.resolve([DADOS.estado, DADOS.ti, DADOS.mun, DADOS.zonas, DADOS.ar || null, DADOS.lst || null])" + js[f:]
 COM_MAPA = "--com-mapa" in sys.argv   # arquivo avulso: o navegador carrega o mapa de fundo
 if not COM_MAPA:
     a, b = js.index("    fundos.mapa = L.tileLayer"), js.index('    const verde = css("--ti");')
@@ -65,6 +66,10 @@ if COM_MAPA:
 else:
     saida_cab = ""
 import base64
+arquivos = {}
+for n in ("lst.png", "lst_valor.png"):
+    if (R / "data" / n).exists():
+        arquivos[n] = "data:image/png;base64," + base64.b64encode((R / "data" / n).read_bytes()).decode()
 for nome in ("ufam", "vsm"):
     b64 = base64.b64encode((R / "img" / f"{nome}.png").read_bytes()).decode()
     corpo = corpo.replace(f'src="img/{nome}.png"', f'src="data:image/png;base64,{b64}"')
@@ -80,6 +85,7 @@ saida = saida_cab + f"""<title>Focos de calor Andirá-Marau</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
 const DADOS = {json.dumps(dados, ensure_ascii=False, separators=(',', ':'))};
+window.ARQUIVOS = {json.dumps(arquivos)};
 {js}
 </script>
 """

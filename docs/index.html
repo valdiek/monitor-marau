@@ -30,6 +30,15 @@
       apagar e avise os vizinhos.</p>
   </section>
 
+  <section class="bloco ar" id="ar" hidden aria-label="Qualidade do ar">
+    <div class="bloco-cab"><h2>Qualidade do ar</h2><span class="nota sem-fonte" id="ar-fonte"></span></div>
+    <div class="ar-topo" id="ar-topo"></div>
+    <div class="ar-grafico" id="ar-grafico" role="img" aria-label="Fumaça (PM2.5) hora a hora"></div>
+    <p class="nota">Fumaça fina (PM2.5) estimada pelo modelo europeu CAMS, com resolução de cerca de 40 km: mostra a
+      fumaça da região, não a de uma roça específica. Com ar “Ruim” ou pior, evite esforço ao ar livre e proteja
+      crianças, idosos e quem tem asma.</p>
+  </section>
+
   <section class="cartoes" aria-label="Resumo">
     <div class="cartao forte" id="c-alerta"><b id="n-alerta">–</b><span id="l-alerta">ativos a até 10 km da comunidade</span></div>
     <div class="cartao"><b id="n-ti">–</b><span>ativos dentro da TI</span></div>
@@ -49,6 +58,25 @@
       <div class="seg" role="group" aria-label="Fundo do mapa">
         <button data-fundo="mapa" class="on">Mapa</button>
         <button data-fundo="sat">Satélite</button>
+      </div>
+    </div>
+    <div class="camadas">
+      <span class="camadas-rot">Camada</span>
+      <div class="seg" role="group" aria-label="Camada do mapa">
+        <button data-camada="nenhuma" class="on">Só focos</button>
+        <button data-camada="lst">Temperatura</button>
+        <button data-camada="ar">Fumaça</button>
+      </div>
+    </div>
+    <div class="painel-camada" id="painel-camada" hidden>
+      <div class="escala" id="escala"></div>
+      <div class="painel-linha">
+        <p class="nota" id="camada-info"></p>
+        <label class="opac" for="opacidade">Transparência <input type="range" id="opacidade" min="20" max="100" value="75"></label>
+        <div class="seg seg-mini" id="ar-quando" role="group" aria-label="Momento da fumaça" hidden>
+          <button data-quando="agora" class="on">Agora</button>
+          <button data-quando="max24">Pior em 24 h</button>
+        </div>
       </div>
     </div>
     <div id="mapa" role="region" aria-label="Mapa dos focos"></div>

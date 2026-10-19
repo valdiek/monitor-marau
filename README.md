@@ -32,6 +32,11 @@ Em `scripts/config.py`: `COMUNIDADE` (nome e coordenadas), `ALERTA_KM` (10) e `A
 
 Em `scripts/config.py`, preencha `ZONA_MARAU["pontos"]` com pontos (lat, lon) ao longo do trecho do rio, por exemplo `[(-3.60, -57.20), (-3.80, -57.15)]`. Os focos a até `buffer_km` dessa linha ganham o selo "Marau" e um contador próprio.
 
+## Temperatura da superfície e qualidade do ar
+
+- **Temperatura (botão "Temperatura" no mapa).** Mosaico Landsat 8/9 (30 m, banda térmica, ~10h da manhã) dos últimos 48 dias, com o pixel sem nuvem mais recente de cada lugar (máscara QA_PIXEL). Fonte: Microsoft Planetary Computer. Roda todo dia pelo workflow *Temperatura da superfície*. Tocando no mapa aparece o valor, o satélite e a data da cena.
+- **Qualidade do ar (quadro e botão "Fumaça").** PM2.5 do modelo CAMS (Copernicus, ~40 km) via Open-Meteo, sem chave. Série das últimas 48 h e previsão de 3 dias na comunidade, e grade de 60 km ao redor. Faixas do IQAr (CETESB). Roda junto com os focos, a cada hora.
+
 ## Como os dados são tratados
 
 - **Fontes.** INPE BDQueimadas (arquivos de 10 min) e NASA FIRMS (VIIRS NOAA-20/21 e MODIS). Detecções iguais nas duas fontes são unidas.
