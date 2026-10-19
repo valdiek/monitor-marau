@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Focos de calor · TI Andirá-Marau</title>
+<meta name="description" content="Monitor de focos de calor na Terra Indígena Andirá-Marau e entorno, com destaque para o rio Marau. Dados INPE e NASA FIRMS.">
+<meta name="theme-color" content="#1b1712">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topo">
+  <div class="topo-in">
+    <p class="sobre">TI Andirá-Marau · Sateré-Mawé</p>
+    <h1>Focos de calor <span>Comunidade Ilha Michiles</span></h1>
+    <p class="atual" id="atual">Carregando dados…</p>
+  </div>
+</header>
+
+<div id="avisos" class="avisos" hidden></div>
+
+<main>
+  <section class="bloco semaforo" id="semaforo" hidden aria-label="Semáforo de queima">
+    <div class="bloco-cab"><h2>Pode queimar a roça?</h2><span class="nota sem-fonte" id="sem-fonte"></span></div>
+    <div class="sem-hoje" id="sem-hoje"></div>
+    <div class="sem-dias" id="sem-dias"></div>
+    <p class="nota">Regra prática a partir da previsão do tempo na comunidade: umidade do ar e vento entre 10h e 18h,
+      e dias seguidos sem chuva. Mesmo em dia verde: faça aceiro, queime no fim da tarde, tenha gente vigiando até
+      apagar e avise os vizinhos.</p>
+  </section>
+
+  <section class="cartoes" aria-label="Resumo">
+    <div class="cartao forte" id="c-alerta"><b id="n-alerta">–</b><span id="l-alerta">ativos a até 10 km da comunidade</span></div>
+    <div class="cartao"><b id="n-ti">–</b><span>ativos dentro da TI</span></div>
+    <div class="cartao"><b id="n-ent">–</b><span id="l-ent">ativos no entorno</span></div>
+    <div class="cartao" id="c-marau" hidden><b id="n-marau">–</b><span>ativos no rio Marau</span></div>
+    <div class="cartao"><b id="n-ext">–</b><span>extintos (estimado) em 48 h</span></div>
+    <div class="cartao"><b id="n-det">–</b><span id="l-det">detecções em 48 h</span></div>
+  </section>
+
+  <section class="bloco">
+    <div class="bloco-cab">
+      <h2>Mapa</h2>
+      <div class="seg" role="group" aria-label="Enquadramento">
+        <button data-zoom="com" class="on">Comunidade</button>
+        <button data-zoom="ti">TI inteira</button>
+      </div>
+      <div class="seg" role="group" aria-label="Fundo do mapa">
+        <button data-fundo="mapa" class="on">Mapa</button>
+        <button data-fundo="sat">Satélite</button>
+      </div>
+    </div>
+    <div id="mapa" role="region" aria-label="Mapa dos focos"></div>
+    <ul class="legenda">
+      <li><i class="casa"></i>comunidade</li>
+      <li><i class="anel"></i>5, 10 e 20 km</li>
+      <li><i class="bola" style="--c:var(--f0)"></i>até 6 h</li>
+      <li><i class="bola" style="--c:var(--f1)"></i>6–12 h</li>
+      <li><i class="bola" style="--c:var(--f2)"></i>12–24 h</li>
+      <li><i class="bola" style="--c:var(--f3)"></i>24–48 h</li>
+      <li><i class="bola ext"></i>extinto (estimado)</li>
+      <li><i class="linha ti"></i>limite da TI</li>
+      <li><i class="linha ent"></i>entorno <span id="ent-km"></span></li>
+      <li id="leg-marau" hidden><i class="area-marau"></i>rio Marau</li>
+    </ul>
+  </section>
+
+  <section class="bloco">
+    <div class="bloco-cab">
+      <h2>Últimas 48 horas</h2>
+      <div class="seg" role="group" aria-label="Filtro">
+        <button data-filtro="todos" class="on">Todos</button>
+        <button data-filtro="ativo">Ativos</button>
+        <button data-filtro="extinto">Extintos</button>
+      </div>
+    </div>
+    <div id="linha" class="linha-tempo"></div>
+    <p class="nota">Ordenados do mais perto para o mais longe da comunidade. Barra cheia: da primeira à última detecção. Barra que se esvai até “agora”: foco ainda ativo.
+      Hachurado: período em que o fogo provavelmente apagou. Toque num foco para vê-lo no mapa.</p>
+  </section>
+
+  <section class="bloco">
+    <h2>Passagens dos satélites</h2>
+    <div class="tabela-rolar">
+      <table class="tabela">
+        <thead><tr><th>Hora</th><th>Satélite</th><th>Pixel</th><th>Na área</th></tr></thead>
+        <tbody id="passagens"><tr><td colspan="4">–</td></tr></tbody>
+      </table>
+    </div>
+    <p class="nota">Horário inferido pelas detecções numa faixa de 3° ao redor da TI. “Na área” conta as detecções
+      dentro da TI e do entorno naquela passagem.</p>
+  </section>
+
+  <section class="bloco texto">
+    <h2>Como ler este monitor</h2>
+    <p><b>Foco de calor não é sinônimo de incêndio.</b> É um pixel do satélite mais quente que o normal: pode ser
+      roça queimando, fogo em capoeira, incêndio florestal ou até telhado aquecido. O tamanho do pixel vai de
+      375 m (VIIRS) a 2 km (GOES); o fogo de verdade costuma ser bem menor que o pixel.</p>
+    <p><b>Extinção é estimada.</b> Nenhum satélite “vê” o fogo apagar. Um foco é marcado como extinto quando
+      duas passagens de satélites polares seguidas não o registram, ou quando o GOES, que via o foco, passa 3 h
+      sem registrá-lo. Nuvem e fumaça podem esconder o fogo e gerar extinções falsas.</p>
+    <p><b>Atualização.</b> A cada hora. Os satélites polares (VIIRS e MODIS) passam por volta de 01h30, 9h–10h e
+      13h30; entre uma passagem e outra, o GOES-19 olha a região a cada 10 minutos.</p>
+    <p><b>Tamanho do fogo.</b> O VIIRS tem pixel de 375 m e costuma detectar fogos de algumas centenas de m²; o MODIS
+      (1 km) e o GOES (~2 km) só pegam fogos maiores. O ponto no mapa é o centro do pixel: o fogo pode estar a
+      algumas centenas de metros dele. Fogo rasteiro sob a floresta e fogo que queimou fora do horário das passagens
+      podem não aparecer. Por isso, confirme sempre em campo.</p>
+    <p><b>Ver de perto.</b> No detalhe de cada foco, o botão “Sentinel-2” abre a imagem de satélite mais recente
+      (10–20 m, a cada ~5 dias quando não há nuvem) para conferir a área queimada.</p>
+    <p><b>Fontes.</b> Focos: INPE (BDQueimadas) e NASA FIRMS. Limite da TI: FUNAI, junho/2025 (via geobr/IPEA).
+      Municípios: malha do IBGE.</p>
+    <p class="nota">Em caso de fogo fora de controle: Corpo de Bombeiros 193 · Linha Verde do IBAMA 0800 061 8080.</p>
+  </section>
+</main>
+
+<footer class="rodape">Horários em hora de Manaus (UTC−4). Dados públicos; uso livre com citação das fontes.</footer>
+
+<script src="vendor/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
