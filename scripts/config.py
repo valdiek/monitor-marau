@@ -42,6 +42,7 @@ TEMPERATURA = {
     "resolucao_graus": 0.0003,   # ~33 m
     "resolucao_ti_graus": 0.0008,  # ~90 m para a TI inteira
     "escala_c": [20, 46],        # faixa de cores
+    "minimo_valido_c": 22,       # valores abaixo disso são tratados como nuvem
 }
 
 # Qualidade do ar (CAMS via Open-Meteo, sem chave)

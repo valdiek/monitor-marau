@@ -106,7 +106,8 @@ def gerar(cat, bbox, res, prefixo, dias, recorte=None):
         ruim = qa & 0b11111  # preenchimento, nuvem dilatada, cirrus, nuvem, sombra
         ok = (st > 0) & (ruim == 0)
         t = st * 0.00341802 + 149.0 - 273.15
-        ok &= (t > 5) & (t < 75)
+        # abaixo de ~22 °C às 10h na Amazônia é quase sempre nuvem fina que escapou da máscara
+        ok &= (t > C.TEMPERATURA["minimo_valido_c"]) & (t < 75)
         novo = ok & np.isnan(temp)
         temp[novo] = t[novo]
         origem[novo] = k

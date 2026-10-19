@@ -15,7 +15,7 @@
   const dh = (s) => (s ? fmtDiaHora.format(d(s)).replace(",", "") : "–");
 
   let E, mapa, camadaFocos, fundos = {}, filtro = "todos";
-  let AR = null, LST = null, camadaExtra = null, camadaAtual = "nenhuma", lstPixels = null, arQuando = "agora";
+  let AR = null, LST = null, LST_TI = null, camadasExtra = [], pixels = {}, camadaAtual = "nenhuma", arQuando = "agora";
   const arquivo = (n) => (window.ARQUIVOS && window.ARQUIVOS[n]) || `data/${n}`;
   const marcadores = {};
 
@@ -51,10 +51,13 @@
     fetch("data/zonas.geojson", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
     fetch("data/ar.json", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
     fetch("data/lst.json", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
-  ]).then(([estado, ti, mun, zonas, ar, lst]) => {
+    fetch("data/lst_ti.json", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
+  ]).then(([estado, ti, mun, zonas, ar, lst, lstTi]) => {
     E = estado;
     AR = ar && !ar.erro && ar.serie ? ar : null;
     LST = lst && !lst.erro && lst.estat ? lst : null;
+    LST_TI = lstTi && !lstTi.erro && lstTi.estat ? lstTi : null;
+    LST_TI && (LST_TI.prefixo = "lst_ti"); LST && (LST.prefixo = "lst");
     resumo();
     semaforo();
     avisos();
@@ -419,7 +422,7 @@
   function iniciarCamadas() {
     const bt = document.querySelectorAll("[data-camada]");
     bt.forEach((b) => {
-      const tem = b.dataset.camada === "nenhuma" || (b.dataset.camada === "lst" ? LST : AR);
+      const tem = b.dataset.camada === "nenhuma" || (b.dataset.camada === "lst" ? (LST || LST_TI) : AR);
       if (!tem) { b.disabled = true; b.title = "ainda sem dados"; }
       b.addEventListener("click", () => {
         if (b.disabled) return;
@@ -427,7 +430,7 @@
         mostrarCamada(b.dataset.camada);
       });
     });
-    $("#opacidade").addEventListener("input", (e) => camadaExtra && camadaExtra.setOpacity(e.target.value / 100));
+    $("#opacidade").addEventListener("input", (e) => camadasExtra.forEach((c) => c.setOpacity(e.target.value / 100)));
     document.querySelectorAll("[data-quando]").forEach((b) => b.addEventListener("click", () => {
       arQuando = b.dataset.quando;
       document.querySelectorAll("[data-quando]").forEach((x) => x.classList.toggle("on", x === b));
@@ -438,19 +441,27 @@
 
   function mostrarCamada(qual) {
     camadaAtual = qual;
-    if (camadaExtra) { mapa.removeLayer(camadaExtra); camadaExtra = null; }
+    camadasExtra.forEach((c) => mapa.removeLayer(c));
+    camadasExtra = [];
     const painel = $("#painel-camada");
     painel.hidden = qual === "nenhuma";
     $("#ar-quando").hidden = qual !== "ar";
     const op = $("#opacidade").value / 100;
     if (qual === "lst") {
-      camadaExtra = L.imageOverlay(arquivo("lst.png") + (window.ARQUIVOS ? "" : `?v=${LST.gerado_em}`), LST.bounds, { opacity: op, className: "img-lst", interactive: false }).addTo(mapa);
-      camadaExtra.bringToBack();
-      escala(LST.rampa, LST.escala_c[0], LST.escala_c[1], "", [20, 25, 30, 35, 40, 46], "°C");
-      const cenas = LST.cenas.slice(0, 3).map((c) => `${c.satelite} ${c.data.slice(8, 10)}/${c.data.slice(5, 7)} (${Math.round(c.pct)}%)`).join(", ");
-      const com = LST.estat.comunidade != null ? ` Na comunidade: <b>${km1(LST.estat.comunidade)} °C</b>.` : "";
-      $("#camada-info").innerHTML = `Temperatura da superfície às ~10h, Landsat 30 m. ${Math.round(LST.cobertura_pct)}% da área sem nuvem nos últimos ${LST.janela_dias} dias; partes sem cor estavam cobertas. Cenas: ${cenas}.${com} Toque no mapa para ver o valor.`;
-      if (!lstPixels) carregarPixels();
+      const base = LST_TI || LST;
+      for (const L0 of [LST_TI, LST].filter(Boolean)) {
+        const c = L.imageOverlay(arquivo(`${L0.prefixo}.png`) + (window.ARQUIVOS ? "" : `?v=${L0.gerado_em}`), L0.bounds,
+          { opacity: op, className: "img-lst", interactive: false }).addTo(mapa);
+        camadasExtra.push(c);
+        if (!pixels[L0.prefixo]) carregarPixels(L0);
+      }
+      camadasExtra.slice().reverse().forEach((c) => c.bringToBack());
+      escala(base.rampa, base.escala_c[0], base.escala_c[1], "", [20, 25, 30, 35, 40, 46], "°C");
+      const ref = LST || LST_TI;
+      const cenas = (LST_TI || LST).cenas.slice(0, 4).map((c) => `${c.satelite} ${c.data.slice(8, 10)}/${c.data.slice(5, 7)}`).join(", ");
+      const com = ref.estat.comunidade != null ? ` Na comunidade: <b>${km1(ref.estat.comunidade)} °C</b>.` : "";
+      const cob = [LST_TI && `TI inteira (90 m): ${Math.round(LST_TI.cobertura_pct)}% sem nuvem`, LST && `perto da comunidade (30 m): ${Math.round(LST.cobertura_pct)}%`].filter(Boolean).join(" · ");
+      $("#camada-info").innerHTML = `Temperatura da superfície às ~10h (Landsat), juntando as imagens dos últimos ${base.janela_dias} dias. ${cob}. Partes sem cor estavam cobertas por nuvem. Cenas: ${cenas}.${com} Toque no mapa para ver o valor.`;
     } else if (qual === "ar") {
       const g = AR.grade, M = g[arQuando];
       const cv = document.createElement("canvas");
@@ -464,14 +475,14 @@
       }
       cx.putImageData(img, 0, 0);
       const p = g.passo / 2;
-      camadaExtra = L.imageOverlay(cv.toDataURL(), [[g.lats[0] - p, g.lons[0] - p], [g.lats[g.lats.length - 1] + p, g.lons[g.lons.length - 1] + p]],
+      const cAr = L.imageOverlay(cv.toDataURL(), [[g.lats[0] - p, g.lons[0] - p], [g.lats[g.lats.length - 1] + p, g.lons[g.lons.length - 1] + p]],
         { opacity: op, className: "img-ar", interactive: false }).addTo(mapa);
-      camadaExtra.bringToBack();
+      cAr.bringToBack();
+      camadasExtra.push(cAr);
       escala(AR_PARADAS.slice(0, 6), 0, 125, "", [0, 15, 50, 75, 125]);
       $("#camada-info").innerHTML = `Fumaça fina (PM2.5, em µg/m³), modelo CAMS (~40 km), ${arQuando === "agora" ? "hora atual" : "pior valor das próximas 24 h"}. Mostra para onde a fumaça da região está indo. Toque no mapa para ver o valor.`;
     }
-    if (qual === "ar") mapa.fitBounds(camadaExtra.getBounds(), { padding: [4, 4] });
-    else if (qual === "lst") mapa.fitBounds(LST.bounds, { padding: [4, 4] });
+    if (qual === "ar") mapa.fitBounds(camadasExtra[0].getBounds(), { padding: [4, 4] });
   }
 
   function escala(paradas, min, max, unidade, marcas, sufixo = "") {
@@ -481,31 +492,40 @@
       <div class="escala-marcas">${marcas.map((v, i) => `<span style="left:${pos(v)}%">${v}${i === marcas.length - 1 ? (sufixo ? " " + sufixo : "+") : ""}</span>`).join("")}<em>${unidade}</em></div>`;
   }
 
-  function carregarPixels() {
+  function carregarPixels(L0) {
     const im = new Image();
     im.onload = () => {
       const cv = document.createElement("canvas");
       cv.width = im.width; cv.height = im.height;
       const cx = cv.getContext("2d", { willReadFrequently: true });
       cx.drawImage(im, 0, 0);
-      lstPixels = { w: im.width, h: im.height, d: cx.getImageData(0, 0, im.width, im.height).data };
+      pixels[L0.prefixo] = { w: im.width, h: im.height, d: cx.getImageData(0, 0, im.width, im.height).data };
     };
-    im.src = arquivo("lst_valor.png") + (window.ARQUIVOS ? "" : `?v=${LST.gerado_em}`);
+    im.src = arquivo(`${L0.prefixo}_valor.png`) + (window.ARQUIVOS ? "" : `?v=${L0.gerado_em}`);
+  }
+
+  function valorLst(L0, lat, lng) {
+    const px = L0 && pixels[L0.prefixo];
+    if (!px) return null;
+    const [[s, w], [n, e]] = L0.bounds;
+    if (lat < s || lat > n || lng < w || lng > e) return null;
+    const x = Math.floor(((lng - w) / (e - w)) * px.w), y = Math.floor(((n - lat) / (n - s)) * px.h);
+    const k = (y * px.w + x) * 4;
+    return { r: px.d[k], g: px.d[k + 1], L0 };
   }
 
   function lerPonto(ev) {
     const { lat, lng } = ev.latlng;
     let html = null;
-    if (camadaAtual === "lst" && LST && lstPixels) {
-      const [[s, w], [n, e]] = LST.bounds;
-      if (lat < s || lat > n || lng < w || lng > e) return;
-      const x = Math.floor(((lng - w) / (e - w)) * lstPixels.w), y = Math.floor(((n - lat) / (n - s)) * lstPixels.h);
-      const k = (y * lstPixels.w + x) * 4, r = lstPixels.d[k], g = lstPixels.d[k + 1];
-      if (!r) html = "<b>Sem dado</b><br>Nuvem ou sombra em todas as imagens do período.";
+    if (camadaAtual === "lst") {
+      let v = valorLst(LST, lat, lng);
+      if (!v || !v.r) v = valorLst(LST_TI, lat, lng) || v;
+      if (!v) return;
+      if (!v.r) html = "<b>Sem dado</b><br>Nuvem ou sombra em todas as imagens do período.";
       else {
-        const t = (r - 1) / 4 + LST.escala_c[0];
-        const c = LST.cenas.find((x) => x.indice === g - 1);
-        html = `<b>${km1(t.toFixed(1))} °C</b> na superfície<br>${c ? `${c.satelite} · ${c.data.slice(8, 10)}/${c.data.slice(5, 7)}${c.hora_utc ? ` · ~${String((+c.hora_utc.slice(0, 2) + 20) % 24).padStart(2, "0")}h${c.hora_utc.slice(3)}` : ""}` : ""}`;
+        const t = (v.r - 1) / 4 + v.L0.escala_c[0];
+        const c = v.L0.cenas.find((x) => x.indice === v.g - 1);
+        html = `<b>${km1(t.toFixed(1))} °C</b> na superfície<br>${c ? `${c.satelite} · ${c.data.slice(8, 10)}/${c.data.slice(5, 7)}${c.hora_utc ? ` · ~${String((+c.hora_utc.slice(0, 2) + 20) % 24).padStart(2, "0")}h${c.hora_utc.slice(3)}` : ""}` : ""}<br><small>pixel de ${v.L0.resolucao_m || 30} m</small>`;
       }
     } else if (camadaAtual === "ar" && AR) {
       const g = AR.grade, p = g.passo;

@@ -45,9 +45,9 @@ css += ("\n.leaflet-container { background: var(--mapa-bg); }\n.cartao b { font-
 
 dados = {k: json.loads((R / "data" / f).read_text()) for k, f in
          [("estado", "estado.json"), ("ti", "ti.geojson"), ("mun", "municipios.geojson"), ("zonas", "zonas.geojson"),
-          ("ar", "ar.json"), ("lst", "lst.json")] if (R / "data" / f).exists()}
-i, f = js.index("  Promise.all(["), js.index(".then(([estado, ti, mun, zonas, ar, lst]) => {")
-js = js[:i] + "  Promise.resolve([DADOS.estado, DADOS.ti, DADOS.mun, DADOS.zonas, DADOS.ar || null, DADOS.lst || null])" + js[f:]
+          ("ar", "ar.json"), ("lst", "lst.json"), ("lst_ti", "lst_ti.json")] if (R / "data" / f).exists()}
+i, f = js.index("  Promise.all(["), js.index(".then(([estado, ti, mun, zonas, ar, lst, lstTi]) => {")
+js = js[:i] + "  Promise.resolve([DADOS.estado, DADOS.ti, DADOS.mun, DADOS.zonas, DADOS.ar || null, DADOS.lst || null, DADOS.lst_ti || null])" + js[f:]
 COM_MAPA = "--com-mapa" in sys.argv   # arquivo avulso: o navegador carrega o mapa de fundo
 if not COM_MAPA:
     a, b = js.index("    fundos.mapa = L.tileLayer"), js.index('    const verde = css("--ti");')
@@ -67,7 +67,7 @@ else:
     saida_cab = ""
 import base64
 arquivos = {}
-for n in ("lst.png", "lst_valor.png"):
+for n in ("lst.png", "lst_valor.png", "lst_ti.png", "lst_ti_valor.png"):
     if (R / "data" / n).exists():
         arquivos[n] = "data:image/png;base64," + base64.b64encode((R / "data" / n).read_bytes()).decode()
 for nome in ("ufam", "vsm"):
