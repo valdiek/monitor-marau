@@ -35,6 +35,20 @@ SEMAFORO = {
     "chuva_minima_mm": 2,       # dia com menos que isso conta como "sem chuva"
 }
 
+# Temperatura da superfície (Landsat 8/9)
+TEMPERATURA = {
+    "raio_km": 22,               # quadrado ao redor da comunidade
+    "janela_dias": 48,           # junta as cenas desse período (a região é muito nublada)
+    "resolucao_graus": 0.0003,   # ~33 m
+    "escala_c": [20, 46],        # faixa de cores
+}
+
+# Qualidade do ar (CAMS via Open-Meteo, sem chave)
+AR = {
+    "grade_raio_km": 60,         # camada de fumaça no mapa
+    "grade_passo_graus": 0.1,
+}
+
 # Zona prioritária do rio Marau.
 # Lista de pontos (lat, lon) ao longo do trecho do rio, de jusante para
 # montante. Os focos a até BUFFER_KM dessa linha recebem o selo "Rio Marau".

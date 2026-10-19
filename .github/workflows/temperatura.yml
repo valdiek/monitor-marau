@@ -1,0 +1,36 @@
+name: Temperatura da superfície (diária)
+
+on:
+  schedule:
+    # 12h20 UTC = 08h20 em Manaus. Landsat passa por volta das 10h locais; a cena chega no dia seguinte.
+    - cron: "20 12 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dados
+  cancel-in-progress: false
+
+jobs:
+  temperatura:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-temperatura.txt
+      - name: Montar mosaico Landsat 8/9
+        run: python scripts/temperatura.py
+      - name: Publicar camada
+        run: |
+          git config user.name "monitor-andira-marau[bot]"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/data/lst.png docs/data/lst_valor.png docs/data/lst.json
+          git diff --cached --quiet || git commit -m "Temperatura da superfície: $(TZ=America/Manaus date +'%d/%m')"
+          git pull --rebase --autostash
+          git push

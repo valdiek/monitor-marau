@@ -28,6 +28,8 @@ jobs:
         env:
           FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
         run: python scripts/coletar.py
+      - name: Qualidade do ar (CAMS)
+        run: python scripts/ar.py
       - name: Avisar no Telegram (focos perto da comunidade)
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
